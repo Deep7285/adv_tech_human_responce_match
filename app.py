@@ -354,8 +354,9 @@ if coachee_file and mentor_file:
                 return (arr - arr.min()) / (arr.max() - arr.min())
 
             final_matches = []
+            all_pairings = [] # Will hold every possible combination for Capacity Optimization
 
-            # Build the matrix coachee by coachee (Greedy matching, static weights)
+            # Build the global matrix
             for idx, c_row in coachee_df.iterrows():
                 c_id = c_row['Map Code/Coachee mapping']
                 batch = c_row['Batch']
@@ -364,6 +365,24 @@ if coachee_file and mentor_file:
                 candidates = mentor_df[mentor_df['Batch'] == batch].copy()
                 if candidates.empty: continue
                 
+                # --- ADVANCED UPGRADE 2: DYNAMIC WEIGHT DISTRIBUTION ---
+                # Identify missing text fields for this specific coachee
+                soft_weights = {'Prof': w_prof, 'Pers': w_pers, 'IIT': w_iit, 'Back': w_back}
+                empty_keys = []
+                if len(c_row['Txt_Prof']) < 5: empty_keys.append('Prof')
+                if len(c_row['Txt_Pers']) < 5: empty_keys.append('Pers')
+                if len(c_row['Txt_IIT']) < 5:  empty_keys.append('IIT')
+                if len(c_row['Txt_Back']) < 5: empty_keys.append('Back')
+                
+                # Redistribute the weight of empty fields to the filled fields
+                missing_w_total = sum([soft_weights[k] for k in empty_keys])
+                for k in empty_keys: soft_weights[k] = 0.0
+                
+                active_keys = [k for k in soft_weights.keys() if k not in empty_keys]
+                if active_keys and missing_w_total > 0:
+                    bonus_per_active = missing_w_total / len(active_keys)
+                    for k in active_keys: soft_weights[k] += bonus_per_active
+
                 # Extract the pre-calculated semantic vectors for this batch
                 batch_m_indices = candidates.index.tolist()
                 
@@ -372,44 +391,64 @@ if coachee_file and mentor_file:
                 s_iit  = normalize(cosine_similarity([v_iit_c_all[idx]],  v_iit_m_all[batch_m_indices]).flatten())
                 s_back = normalize(cosine_similarity([v_back_c_all[idx]], v_back_m_all[batch_m_indices]).flatten())
 
-                scores = []
                 for i, (m_idx, m_row) in enumerate(candidates.iterrows()):
                     sc_spec = 1.0 if (c_row['Branch_Grp'] in spec_match_logic and m_row['Spec_Grp'] in spec_match_logic[c_row['Branch_Grp']]) else 0.0
                     sc_deg = 1.0 if ((c_row['Deg_Grp'] == m_row['Deg_Grp'] and c_row['Deg_Grp'] != 0) or (c_row['Deg_Grp'] == 1 and m_row['Deg_Grp'] == 2) or (c_row['Deg_Grp'] == 2 and m_row['Deg_Grp'] == 1)) else 0.0
                     
-                    # Apply Static Weights directly from the sidebar
+                    # Apply Dynamic Weights
                     total = ((sc_spec * w_spec) + (sc_deg * w_deg) + 
-                             (s_prof[i] * w_prof) + 
-                             (s_pers[i] * w_pers) + 
-                             (s_iit[i]  * w_iit) + 
-                             (s_back[i] * w_back))
+                             (s_prof[i] * soft_weights['Prof']) + 
+                             (s_pers[i] * soft_weights['Pers']) + 
+                             (s_iit[i]  * soft_weights['IIT']) + 
+                             (s_back[i] * soft_weights['Back']))
                              
                     if 'female' in c_gender and 'female' in clean(m_row.get('Gender', '')):
                         total += bonus_female
                         
                     details_str = f"(Tot:{total:.2f}), (H:SP{int(sc_spec)}D{int(sc_deg)}), (S:Pr{s_prof[i]:.1f}, Pe{s_pers[i]:.1f}, IX{s_iit[i]:.1f}, FB{s_back[i]:.1f})"
                     
-                    scores.append({
-                        'id': m_row['Mentor ID'],
+                    all_pairings.append({
+                        'c_id': c_id,
+                        'm_id': m_row['Mentor ID'],
                         'score': total,
                         'details': details_str
                     })
 
-                # Sort and isolate the Top 3 unique mentors for this specific coachee
-                scores.sort(key=lambda x: x['score'], reverse=True)
-                top3 = []
-                seen = set()
-                for s in scores:
-                    if s['id'] not in seen:
-                        top3.append(s)
-                        seen.add(s['id'])
-                    if len(top3) == 3: break
+                # --- ADVANCED UPGRADE 3: GLOBAL CAPACITY OPTIMIZATION ---
+                MAX_CAPACITY = 3 # A mentor can be Option 1 for a maximum of 3 students
                 
-                # Reformat for DataFrame export
+                # Sort all possible pairings across the entire program from highest score to lowest
+                all_pairings.sort(key=lambda x: x['score'], reverse=True)
+                
+                coachee_results = {c_id: [] for c_id in coachee_df['Map Code/Coachee mapping']}
+                mentor_opt1_counts = {m_id: 0 for m_id in mentor_df['Mentor ID']}
+                
+                for pair in all_pairings:
+                    c_id = pair['c_id']
+                    m_id = pair['m_id']
+                    
+                    # If this coachee already has 3 options, skip
+                    if len(coachee_results[c_id]) >= 3:
+                        continue
+                        
+                    # If we are looking for Option 1, ensure mentor isn't overloaded
+                    if len(coachee_results[c_id]) == 0:
+                        if mentor_opt1_counts[m_id] < MAX_CAPACITY:
+                            coachee_results[c_id].append(pair)
+                            mentor_opt1_counts[m_id] += 1
+                    else:
+                        # For Options 2 and 3, capacity doesn't matter, but check for duplicates
+                        existing_mentors = [p['m_id'] for p in coachee_results[c_id]]
+                        if m_id not in existing_mentors:
+                            coachee_results[c_id].append(pair)
+                
+            # Reformat for DataFrame export
+            for c_id, top3 in coachee_results.items():
+                if not top3: continue
                 row = {'Coachee Code': c_id}
                 for k in range(3):
                     if k < len(top3):
-                        row[f'Option {k+1} Mentor ID']  = top3[k]['id']
+                        row[f'Option {k+1} Mentor ID']  = top3[k]['m_id']
                         row[f'Option {k+1} Score (%)']  = round(top3[k]['score'] * 100, 1)
                         row[f'Option {k+1} Details']    = top3[k]['details']
                     else:
@@ -418,7 +457,7 @@ if coachee_file and mentor_file:
                         row[f'Option {k+1} Details']    = "N/A"
                 final_matches.append(row)
 
-            res_df = pd.DataFrame(final_matches)
+        res_df = pd.DataFrame(final_matches)
 
         # ── Results ──────────────────────────────────────────────────────────
         st.success("✅ Matching complete!")
