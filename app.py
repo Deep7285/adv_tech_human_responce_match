@@ -442,22 +442,22 @@ if coachee_file and mentor_file:
                         if m_id not in existing_mentors:
                             coachee_results[c_id].append(pair)
                 
-                # Reformat for DataFrame export
-                for c_id, top3 in coachee_results.items():
-                    if not top3: continue
-                    row = {'Coachee Code': c_id}
-                    for k in range(3):
-                        if k < len(top3):
-                            row[f'Option {k+1} Mentor ID']  = top3[k]['m_id']
-                            row[f'Option {k+1} Score (%)']  = round(top3[k]['score'] * 100, 1)
-                            row[f'Option {k+1} Details']    = top3[k]['details']
-                        else:
-                            row[f'Option {k+1} Mentor ID']  = "N/A"
-                            row[f'Option {k+1} Score (%)']  = "—"
-                            row[f'Option {k+1} Details']    = "N/A"
-                    final_matches.append(row)
+            # Reformat for DataFrame export
+            for c_id, top3 in coachee_results.items():
+                if not top3: continue
+                row = {'Coachee Code': c_id}
+                for k in range(3):
+                    if k < len(top3):
+                        row[f'Option {k+1} Mentor ID']  = top3[k]['m_id']
+                        row[f'Option {k+1} Score (%)']  = round(top3[k]['score'] * 100, 1)
+                        row[f'Option {k+1} Details']    = top3[k]['details']
+                    else:
+                        row[f'Option {k+1} Mentor ID']  = "N/A"
+                        row[f'Option {k+1} Score (%)']  = "—"
+                        row[f'Option {k+1} Details']    = "N/A"
+                final_matches.append(row)
 
-            res_df = pd.DataFrame(final_matches)
+        res_df = pd.DataFrame(final_matches)
 
         # ── Results ──────────────────────────────────────────────────────────
         st.success("✅ Matching complete!")
