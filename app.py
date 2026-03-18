@@ -298,11 +298,12 @@ with col2:
 # ─── Run Matching ──────────────────────────────────────────────────────────────
 st.markdown("---")
 
-st.markdown("### ⚙️ Select Matching Engine")
+st.markdown("### ⚙️ Select Matching Technique")
 engine_choice = st.radio(
     "Choose the algorithm to run:",
-    ("Standard (TF-IDF + Static Weights)", "Advanced (Semantic AI + Dynamic Weights + Capacity Optimization)"),
-    help="Standard uses exact keyword matching and static weights. Advanced uses Neural Networks for context, redistributes weights for blank fields, and optimizes mentor capacity globally."
+    ("Standard TF-IDF Technique", "Advanced Semantic Embedding based"),
+    help="1. Standard TF-IDF Technique uses exact keyword matching and static weights in the data.\n\n"
+    "2. Advanced Semantic Embedding based uses sentance transformer for context, redistributes weights for blank fields, and optimizes mentor capacity globally.\n\n"
 )
 
 if coachee_file and mentor_file:
@@ -310,7 +311,7 @@ if coachee_file and mentor_file:
         
         # Determine specific messages and file names
         is_advanced = "Advanced" in engine_choice
-        loading_msg = "🧠 Running Neural Semantic Analysis & Global Capacity Optimization... (this may take 30-60 seconds)" if is_advanced else "📊 Running Standard TF-IDF Keyword Analysis..."
+        loading_msg = "🧠 Running Advanced Semantic Embedding based Analysis (this may take 30-60 seconds)" if is_advanced else "📊 Running Standard TF-IDF Analysis..."
         file_suffix = "Semantic_Advanced" if is_advanced else "TF-IDF_Standard"
         
         with st.spinner(loading_msg):
